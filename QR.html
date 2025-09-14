@@ -1,0 +1,107 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Transport Check-in</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 20px; background: #f5f7fb; }
+    .card { max-width: 600px; margin: 50px auto; padding: 25px; border-radius: 14px; background: #fff; box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
+    h2 { margin-top: 0; color: #222; }
+    .row { margin: 15px 0; font-size: 16px; }
+    .label { font-weight: 600; color: #333; }
+    .value { color: #000; }
+    .err { background: #fff0f0; padding: 12px; border-radius: 8px; color: #7b1212; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>✅ Transport Check-in</h2>
+
+    <div class="row"><span class="label">Vehicle ID:</span> <span id="vehicleId" class="value">Loading...</span></div>
+    <div class="row"><span class="label">📍 Location:</span> <span id="location" class="value">Fetching...</span></div>
+    <div class="row"><span class="label">🕒 Time:</span> <span id="time" class="value">Waiting...</span></div>
+
+    <div id="error" class="err" style="display:none"></div>
+  </div>
+
+  <script>
+    function getQueryParam(name) {
+      return new URL(window.location.href).searchParams.get(name);
+    }
+
+    function humanReadable(dateObj) {
+      const d = dateObj.getDate();
+      const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sept","Oct","Nov","Dec"];
+      const mo = months[dateObj.getMonth()];
+      let hh = dateObj.getHours();
+      const mm = dateObj.getMinutes().toString().padStart(2,'0');
+      const ampm = hh >= 12 ? 'PM' : 'AM';
+      hh = hh % 12; if (hh === 0) hh = 12;
+      return `${d} ${mo} ${dateObj.getFullYear()}, ${hh}:${mm} ${ampm}`;
+    }
+
+    async function getAddress(lat, lng) {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+        const data = await res.json();
+        return data.display_name || `${lat}, ${lng}`;
+      } catch (e) {
+        return `${lat}, ${lng}`;
+      }
+    }
+
+    const vehicleEl = document.getElementById('vehicleId');
+    const locEl = document.getElementById('location');
+    const timeEl = document.getElementById('time');
+    const errEl = document.getElementById('error');
+
+    const VEHICLE_ID = getQueryParam('vid') || 'Unknown Vehicle';
+    vehicleEl.textContent = VEHICLE_ID;
+
+    function showError(msg) {
+      errEl.style.display = 'block';
+      errEl.textContent = msg;
+    }
+
+    async function sendData(vehicleId, lat, lng, time) {
+      // Optional: send to server
+      try {
+        await fetch('https://your-server.com/checkin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vehicleId, lat, lng, time })
+        });
+        console.log('✅ Data sent to server');
+      } catch (e) {
+        console.warn('❌ Could not send data to server');
+      }
+    }
+
+    function doCheckin() {
+      if (!navigator.geolocation) {
+        showError('❌ Geolocation not supported on this device.');
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const readableTime = humanReadable(new Date());
+        timeEl.textContent = readableTime;
+
+        const address = await getAddress(lat, lng);
+        locEl.textContent = address;
+
+        // Send data
+        sendData(VEHICLE_ID, lat, lng, readableTime);
+      }, (err) => {
+        if (err.code === 1) showError('❌ Location permission denied.');
+        else showError('❌ Location error: ' + err.message);
+      }, { enableHighAccuracy: true, timeout: 15000 });
+    }
+
+    window.addEventListener('load', doCheckin);
+  </script>
+</body>
+</html>
